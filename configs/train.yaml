@@ -1,0 +1,23 @@
+defaults:
+  - _self_
+  - env: default
+  - algo: sac.yaml
+
+total_timesteps: 400_000
+progress_bar: True
+
+# eval & early stopping
+evaluation:
+  deterministic: True
+  n_eval_episodes: 20
+  eval_freq: 10_000 # set to null to disable evaluation and early stopping
+
+# reproducibility
+seed: 1
+
+wandb:
+  entity: null
+  project: controls_challenge_2
+  save_model: True
+
+debug: True

@@ -1,0 +1,6 @@
+# 5 seeds
+# ablate gsde
+# ablate symlog vs. rescaling??
+
+# search discount factor?
+# search reward design/scaling thingy?
