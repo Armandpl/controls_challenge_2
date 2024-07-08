@@ -15,9 +15,11 @@ from tinyphysics import (
   DEL_T,
   COST_END_IDX,
   CONTEXT_LENGTH,
+  LATACCEL_RANGE
 )
 from controllers.zero import Controller as ZeroController
 from controllers.pid import Controller as PIDController
+from utils import canvas_to_img
 
 DATA_PATH = Path("./data/")
 TEST_SET_SIZE = 5000
@@ -54,7 +56,7 @@ class TinyPhysicsEnv(gym.Env):
       np.array(actions), # (20,)
       np.array(raw_states).flatten(), # (20*3,) roll_lataccel, v_ego, a_ego
       np.array(plan) # (49,)
-    ]) # (169,)
+    ], dtype=np.float32) # (169,)
 
   def step(self, action: float):
     # TODO match the timing/order
@@ -79,14 +81,31 @@ class TinyPhysicsEnv(gym.Env):
     current = self.sim.current_lataccel_history[-1]
     prev = self.sim.current_lataccel_history[-2]
 
-    lat_accel_cost = ((target - current)**2) * 100
-    jerk_cost = (((prev - current)/DEL_T)**2) * 100
-    total_cost = (lat_accel_cost * LAT_ACCEL_COST_MULTIPLIER) + jerk_cost
-    reward = -total_cost
+    # lat_accel_cost = ((target - current)**2) * 100
+    # jerk_cost = (((prev - current)/DEL_T)**2) * 100
+    # total_cost = (lat_accel_cost * LAT_ACCEL_COST_MULTIPLIER) + jerk_cost
+
+    error = abs(target - current)
+    lataccel_rwd = np.exp(-error * 12)
+
+    continuity_cost = ((prev - current) ** 2) / (LATACCEL_RANGE[1] - LATACCEL_RANGE[0]) ** 2
+    reward  = lataccel_rwd - continuity_cost
 
     terminated = self.sim.step_idx == COST_END_IDX
-    if abs(target-current) > self.max_lataccel_err:
+    if abs(target-current) > self.max_lataccel_err and self.sim.step_idx>120: # give it at least 2s
       terminated = True
+
+    if terminated:
+      info = self.sim.compute_cost()
+
+      # make plot of episode
+      fig, ax = plt.subplots(4, figsize=(12, 14), constrained_layout=True)
+      canvas = fig.canvas
+      self.sim.plot_history(ax)
+      canvas.draw()  # draw the canvas, cache the renderer
+      image = canvas_to_img(canvas)
+      info.update({"plot": image})
+      plt.close("all")
 
     return obs, reward, terminated, truncated, info
 
@@ -131,10 +150,7 @@ if __name__ == "__main__":
   print("mean reward:", return_/COST_END_IDX)
 
   fig, ax = plt.subplots(4, figsize=(12, 14), constrained_layout=True)
-  env.sim.plot_data(ax[0], [(env.sim.target_lataccel_history, 'Target lataccel'), (env.sim.current_lataccel_history, 'Current lataccel')], ['Step', 'Lateral Acceleration'], 'Lateral Acceleration')
-  env.sim.plot_data(ax[1], [(env.sim.action_history, 'Action')], ['Step', 'Action'], 'Action')
-  env.sim.plot_data(ax[2], [(np.array(env.sim.state_history)[:, 0], 'Roll Lateral Acceleration')], ['Step', 'Lateral Accel due to Road Roll'], 'Lateral Accel due to Road Roll')
-  env.sim.plot_data(ax[3], [(np.array(env.sim.state_history)[:, 1], 'v_ego')], ['Step', 'v_ego'], 'v_ego')
+  env.sim.plot_history(ax)
   plt.show()
 
 # TODO make sure to log lataccel and jerk cost separately
