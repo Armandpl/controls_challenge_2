@@ -32,7 +32,7 @@ def symlog(x):
 
 
 class TinyPhysicsEnv(gym.Env):
-  def __init__(self, eval=False, max_lataccel_err:float=1.5, symlog_obs:bool=True):
+  def __init__(self, eval=False, max_lataccel_err:float=1.0, symlog_obs:bool=True):
     self.eval = eval
     self.max_lataccel_err = max_lataccel_err
     self.symlog_obs = symlog_obs
@@ -65,18 +65,13 @@ class TinyPhysicsEnv(gym.Env):
       np.array(raw_states).flatten(), # (20*3,) roll_lataccel, v_ego, a_ego
       np.array(plan) # (49,)
     ], dtype=np.float32) # (169,)
+
     if self.symlog_obs:
-      return symlog(obs)
-    else:
-      return obs
+      obs = symlog(obs)
+
+    return obs
 
   def step(self, action: float):
-    # TODO match the timing/order
-    state, target, futureplan = self.sim.get_state_target_futureplan(self.sim.step_idx)
-    self.sim.state_history.append(state)
-    self.sim.target_lataccel_history.append(target)
-    self.sim.futureplan = futureplan
-
     # control step:
     action = np.clip(action, self.action_space.low, self.action_space.high)
     action = float(action[0])
@@ -84,10 +79,6 @@ class TinyPhysicsEnv(gym.Env):
 
     self.sim.sim_step(self.sim.step_idx)
     self.sim.step_idx += 1
-
-    truncated = False
-    info = {} # add plot? add lataccel?
-    obs = self._get_obs()
 
     target = self.sim.target_lataccel_history[-1]
     current = self.sim.current_lataccel_history[-1]
@@ -99,6 +90,14 @@ class TinyPhysicsEnv(gym.Env):
     # continuity_cost = ((prev - current) ** 2) / (LATACCEL_RANGE[1] - LATACCEL_RANGE[0]) ** 2
     reward  = lataccel_rwd # - continuity_cost
 
+    state, target, futureplan = self.sim.get_state_target_futureplan(self.sim.step_idx)
+    self.sim.state_history.append(state)
+    self.sim.target_lataccel_history.append(target)
+    self.sim.futureplan = futureplan
+    obs = self._get_obs()
+
+    truncated = False
+    info = {}
     terminated = self.sim.step_idx == COST_END_IDX
     if abs(target-current) > self.max_lataccel_err and self.sim.step_idx>120: # give it at least 2s
       terminated = True
