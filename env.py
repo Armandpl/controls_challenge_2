@@ -4,6 +4,8 @@ from typing import Optional
 
 import gymnasium as gym
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from tinyphysics import (
@@ -24,10 +26,16 @@ from utils import canvas_to_img
 DATA_PATH = Path("./data/")
 TEST_SET_SIZE = 5000
 
+
+def symlog(x):
+  return np.sign(x) * np.log(np.abs(x)+1)
+
+
 class TinyPhysicsEnv(gym.Env):
-  def __init__(self, eval=False, max_lataccel_err:float=1.5):
+  def __init__(self, eval=False, max_lataccel_err:float=1.5, symlog_obs:bool=True):
     self.eval = eval
     self.max_lataccel_err = max_lataccel_err
+    self.symlog_obs = symlog_obs
 
     self.action_space = gym.spaces.Box(STEER_RANGE[0], STEER_RANGE[1])
     self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(169,))
@@ -50,13 +58,17 @@ class TinyPhysicsEnv(gym.Env):
     # only give plan, not future states as we can't get those at inference time
     plan = self.sim.futureplan.lataccel
 
-    return np.concatenate([
+    obs = np.concatenate([
       np.array(lataccels), # (20,)
       np.array(target_lataccels), # (20,)
       np.array(actions), # (20,)
       np.array(raw_states).flatten(), # (20*3,) roll_lataccel, v_ego, a_ego
       np.array(plan) # (49,)
     ], dtype=np.float32) # (169,)
+    if self.symlog_obs:
+      return symlog(obs)
+    else:
+      return obs
 
   def step(self, action: float):
     # TODO match the timing/order
@@ -81,15 +93,11 @@ class TinyPhysicsEnv(gym.Env):
     current = self.sim.current_lataccel_history[-1]
     prev = self.sim.current_lataccel_history[-2]
 
-    # lat_accel_cost = ((target - current)**2) * 100
-    # jerk_cost = (((prev - current)/DEL_T)**2) * 100
-    # total_cost = (lat_accel_cost * LAT_ACCEL_COST_MULTIPLIER) + jerk_cost
-
     error = abs(target - current)
     lataccel_rwd = np.exp(-error * 12)
 
-    continuity_cost = ((prev - current) ** 2) / (LATACCEL_RANGE[1] - LATACCEL_RANGE[0]) ** 2
-    reward  = lataccel_rwd - continuity_cost
+    # continuity_cost = ((prev - current) ** 2) / (LATACCEL_RANGE[1] - LATACCEL_RANGE[0]) ** 2
+    reward  = lataccel_rwd # - continuity_cost
 
     terminated = self.sim.step_idx == COST_END_IDX
     if abs(target-current) > self.max_lataccel_err and self.sim.step_idx>120: # give it at least 2s
@@ -99,13 +107,14 @@ class TinyPhysicsEnv(gym.Env):
       info = self.sim.compute_cost()
 
       # make plot of episode
-      fig, ax = plt.subplots(4, figsize=(12, 14), constrained_layout=True)
-      canvas = fig.canvas
-      self.sim.plot_history(ax)
-      canvas.draw()  # draw the canvas, cache the renderer
-      image = canvas_to_img(canvas)
-      info.update({"plot": image})
-      plt.close("all")
+      if self.eval:
+        fig, ax = plt.subplots(4, figsize=(12, 14), constrained_layout=True)
+        canvas = fig.canvas
+        self.sim.plot_history(ax)
+        canvas.draw()  # draw the canvas, cache the renderer
+        image = canvas_to_img(canvas)
+        info.update({"plot": image})
+        plt.close("all")
 
     return obs, reward, terminated, truncated, info
 
@@ -130,7 +139,7 @@ class TinyPhysicsEnv(gym.Env):
 
 
 if __name__ == "__main__":
-  env = TinyPhysicsEnv(eval=True)
+  env = TinyPhysicsEnv(eval=True, symlog_obs=False)
   controller = PIDController()
 
   obs, _ = env.reset()
