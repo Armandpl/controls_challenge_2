@@ -77,7 +77,6 @@ class EvalCallback(EventCallback):
             stats.setdefault(f"eval/mean_{k}", []).append(v)
 
       for k,v in stats.items():
-        print(v)
         self.logger.record(k,float(np.mean(v)))
 
       # stack the plots
@@ -134,7 +133,7 @@ def main(cfg: DictConfig):
       else EvalCallback(
         eval_env=eval_env,
         n_eval_episodes=cfg.evaluation.n_eval_episodes,
-        eval_freq=cfg.evaluation.eval_freq,
+        eval_freq=cfg.evaluation.eval_freq // cfg.n_envs,
         deterministic=cfg.evaluation.deterministic,
       ),
       progress_bar=cfg.progress_bar,
