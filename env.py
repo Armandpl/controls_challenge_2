@@ -83,11 +83,10 @@ class TinyPhysicsEnv(gym.Env):
     current = self.sim.current_lataccel_history[-1]
     prev = self.sim.current_lataccel_history[-2]
 
-    lat_accel_cost = ((target - current)**2) * 100
-    jerk_cost = (((current - prev) / DEL_T)**2) * 100
-    total_cost = (lat_accel_cost * LAT_ACCEL_COST_MULTIPLIER) + jerk_cost
+    lat_accel_cost = ((target - current)**2)
+    jerk_cost = (((current - prev) / DEL_T)**2)
+    total_cost = lat_accel_cost + jerk_cost/LAT_ACCEL_COST_MULTIPLIER
 
-    continuity_cost = ((prev - current) ** 2) / (LATACCEL_RANGE[1] - LATACCEL_RANGE[0]) ** 2
     reward  = -symlog(total_cost)
 
     state, target, futureplan = self.sim.get_state_target_futureplan(self.sim.step_idx)
