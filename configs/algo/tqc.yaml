@@ -1,0 +1,16 @@
+_target_: sb3_contrib.tqc.TQC
+policy: "MlpPolicy"
+# learning_rate: 0.0002
+buffer_size: 1_000_000
+# tau: 0.005
+# gamma: 0.99
+# batch_size: 2048
+# target_update_interval: 1
+# learning_starts: 50_000
+use_sde: True
+use_sde_at_warmup: True
+sde_sample_freq: 64
+train_freq: 1 # 1 step
+gradient_steps: -1
+stats_window_size: 20
+# policy_kwargs: "dict(log_std_init=-3, net_arch=[400, 300])"
