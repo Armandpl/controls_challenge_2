@@ -164,19 +164,32 @@ class TinyPhysicsSimulator:
     self.sim_step(self.step_idx)
     self.step_idx += 1
 
-  def plot_data(self, ax, lines, axis_labels, title) -> None:
+  def plot_data(self, ax, lines, axis_labels, title, y_lim=None) -> None:
     ax.clear()
     for line, label in lines:
       ax.plot(line, label=label)
     ax.axline((CONTROL_START_IDX, 0), (CONTROL_START_IDX, 1), color='black', linestyle='--', alpha=0.5, label='Control Start')
     ax.legend()
     ax.set_title(f"{title} | Step: {self.step_idx}")
-    ax.set_xlabel(axis_labels[0])
-    ax.set_ylabel(axis_labels[1])
+    if y_lim:
+      ax.set_ylim(y_lim[0], y_lim[1])
 
   def plot_history(self, ax, full=True):
-    self.plot_data(ax[0], [(self.target_lataccel_history, 'Target lataccel'), (self.current_lataccel_history, 'Current lataccel')], ['Step', 'Lateral Acceleration'], 'Lateral Acceleration')
-    self.plot_data(ax[1], [(self.action_history, 'Action')], ['Step', 'Action'], 'Action')
+    ax[0].set_ylim(LATACCEL_RANGE[0], LATACCEL_RANGE[1])
+    ax[1].set_ylim(STEER_RANGE[0], STEER_RANGE[1])
+    self.plot_data(
+      ax[0], 
+      [(self.target_lataccel_history, 'Target lataccel'), 
+       (self.current_lataccel_history, 'Current lataccel')], 
+       ['Step', 'Lateral Acceleration'], 'Lateral Acceleration',
+      y_lim=LATACCEL_RANGE
+    )
+    self.plot_data(
+      ax[1], 
+      [(self.action_history, 'Action')], 
+      ['Step', 'Action'], 'Action',
+      y_lim=STEER_RANGE
+    )
     if full:
       self.plot_data(ax[2], [(np.array(self.state_history)[:, 0], 'Roll Lateral Acceleration')], ['Step', 'Lateral Accel due to Road Roll'], 'Lateral Accel due to Road Roll')
       self.plot_data(ax[3], [(np.array(self.state_history)[:, 1], 'v_ego')], ['Step', 'v_ego'], 'v_ego')
