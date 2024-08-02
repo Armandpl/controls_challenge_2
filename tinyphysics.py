@@ -174,11 +174,12 @@ class TinyPhysicsSimulator:
     ax.set_xlabel(axis_labels[0])
     ax.set_ylabel(axis_labels[1])
 
-  def plot_history(self, ax):
+  def plot_history(self, ax, full=True):
     self.plot_data(ax[0], [(self.target_lataccel_history, 'Target lataccel'), (self.current_lataccel_history, 'Current lataccel')], ['Step', 'Lateral Acceleration'], 'Lateral Acceleration')
     self.plot_data(ax[1], [(self.action_history, 'Action')], ['Step', 'Action'], 'Action')
-    self.plot_data(ax[2], [(np.array(self.state_history)[:, 0], 'Roll Lateral Acceleration')], ['Step', 'Lateral Accel due to Road Roll'], 'Lateral Accel due to Road Roll')
-    self.plot_data(ax[3], [(np.array(self.state_history)[:, 1], 'v_ego')], ['Step', 'v_ego'], 'v_ego')
+    if full:
+      self.plot_data(ax[2], [(np.array(self.state_history)[:, 0], 'Roll Lateral Acceleration')], ['Step', 'Lateral Accel due to Road Roll'], 'Lateral Accel due to Road Roll')
+      self.plot_data(ax[3], [(np.array(self.state_history)[:, 1], 'v_ego')], ['Step', 'v_ego'], 'v_ego')
 
   def compute_cost(self) -> Dict[str, float]:
     target = np.array(self.target_lataccel_history)[CONTROL_START_IDX:COST_END_IDX]
