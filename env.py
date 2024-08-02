@@ -40,8 +40,7 @@ class TinyPhysicsEnv(gym.Env):
     self.action_space = gym.spaces.Box(STEER_RANGE[0], STEER_RANGE[1])
     self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(169,))
 
-    # load the model once
-    self.tinyphysicsmodel = TinyPhysicsModel("models/tinyphysics.onnx", debug=False)
+    self.tinyphysicsmodel = None
 
     data = sorted(DATA_PATH.iterdir())[TEST_SET_SIZE:]
     if self.eval:
@@ -84,11 +83,12 @@ class TinyPhysicsEnv(gym.Env):
     current = self.sim.current_lataccel_history[-1]
     prev = self.sim.current_lataccel_history[-2]
 
-    error = abs(target - current)
-    lataccel_rwd = np.exp(-error * 12)
+    lat_accel_cost = ((target - current)**2) * 100
+    jerk_cost = (((current - prev) / DEL_T)**2) * 100
+    total_cost = (lat_accel_cost * LAT_ACCEL_COST_MULTIPLIER) + jerk_cost
 
-    # continuity_cost = ((prev - current) ** 2) / (LATACCEL_RANGE[1] - LATACCEL_RANGE[0]) ** 2
-    reward  = lataccel_rwd # - continuity_cost
+    continuity_cost = ((prev - current) ** 2) / (LATACCEL_RANGE[1] - LATACCEL_RANGE[0]) ** 2
+    reward  = -symlog(total_cost)
 
     state, target, futureplan = self.sim.get_state_target_futureplan(self.sim.step_idx)
     self.sim.state_history.append(state)
@@ -99,17 +99,17 @@ class TinyPhysicsEnv(gym.Env):
     truncated = False
     info = {}
     terminated = self.sim.step_idx == COST_END_IDX
-    if abs(target-current) > self.max_lataccel_err and self.sim.step_idx>120: # give it at least 2s
-      terminated = True
+    # if abs(target-current) > self.max_lataccel_err and self.sim.step_idx>120: # give it at least 2s
+    #   terminated = True
 
     if terminated:
       info = self.sim.compute_cost()
 
       # make plot of episode
       if self.eval:
-        fig, ax = plt.subplots(4, figsize=(12, 14), constrained_layout=True)
+        fig, ax = plt.subplots(2, figsize=(12, 14), constrained_layout=True)
         canvas = fig.canvas
-        self.sim.plot_history(ax)
+        self.sim.plot_history(ax, full=False)
         canvas.draw()  # draw the canvas, cache the renderer
         image = canvas_to_img(canvas)
         info.update({"plot": image})
@@ -123,6 +123,9 @@ class TinyPhysicsEnv(gym.Env):
     options: Optional[dict] = None,
   ):
     super().reset(seed=seed, options=options)
+
+    if self.tinyphysicsmodel is None:
+      self.tinyphysicsmodel = TinyPhysicsModel("models/tinyphysics.onnx", debug=False)
 
     self.sim = TinyPhysicsSimulator(
       model=self.tinyphysicsmodel,
