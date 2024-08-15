@@ -13,11 +13,9 @@ from tinyphysics import (
   TinyPhysicsModel,
   STEER_RANGE,
   CONTROL_START_IDX,
-  LAT_ACCEL_COST_MULTIPLIER,
   DEL_T,
   COST_END_IDX,
   CONTEXT_LENGTH,
-  LATACCEL_RANGE
 )
 from controllers.zero import Controller as ZeroController
 from controllers.pid import Controller as PIDController
@@ -26,19 +24,19 @@ from utils import canvas_to_img
 DATA_PATH = Path("./data/")
 TEST_SET_SIZE = 5000
 
-
 def symlog(x):
   return np.sign(x) * np.log(np.abs(x)+1)
 
 
 class TinyPhysicsEnv(gym.Env):
-  def __init__(self, eval=False, max_lataccel_err:float=1.0, symlog_obs:bool=True):
+  def __init__(self, eval=False, max_lataccel_err:float=1.0, symlog_obs:bool=True, jerk_cost_coef: float=1.0):
     self.eval = eval
     self.max_lataccel_err = max_lataccel_err
     self.symlog_obs = symlog_obs
+    self.jerk_cost_coef = jerk_cost_coef
 
     self.action_space = gym.spaces.Box(STEER_RANGE[0], STEER_RANGE[1])
-    self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(169,))
+    self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(316,))
 
     self.tinyphysicsmodel = None
 
@@ -62,7 +60,10 @@ class TinyPhysicsEnv(gym.Env):
       np.array(target_lataccels), # (20,)
       np.array(actions), # (20,)
       np.array(raw_states).flatten(), # (20*3,) roll_lataccel, v_ego, a_ego
-      np.array(plan) # (49,)
+      np.array(self.sim.futureplan.lataccel), # (49,)
+      np.array(self.sim.futureplan.roll_lataccel), # (49,)
+      np.array(self.sim.futureplan.v_ego), # (49,)
+      np.array(self.sim.futureplan.a_ego), # (49,)
     ], dtype=np.float32) # (169,)
 
     if self.symlog_obs:
@@ -84,10 +85,11 @@ class TinyPhysicsEnv(gym.Env):
     prev = self.sim.current_lataccel_history[-2]
 
     lat_accel_cost = ((target - current)**2)
-    jerk_cost = (((current - prev) / DEL_T)**2)
-    total_cost = lat_accel_cost + jerk_cost/LAT_ACCEL_COST_MULTIPLIER
+    # continuity_cost = ((self.sim.action_history[-2] - self.sim.action_history[-1])**2)
+    jerk_cost = (((current - prev) / DEL_T)**2) # cheating, using the action continuity as a proxy for the jerk
+    total_cost = lat_accel_cost + jerk_cost * self.jerk_cost_coef # continuity_cost
 
-    reward  = -symlog(total_cost)
+    reward = -symlog(total_cost)
 
     state, target, futureplan = self.sim.get_state_target_futureplan(self.sim.step_idx)
     self.sim.state_history.append(state)
@@ -98,7 +100,8 @@ class TinyPhysicsEnv(gym.Env):
     truncated = False
     info = {}
     terminated = self.sim.step_idx == COST_END_IDX
-    # if abs(target-current) > self.max_lataccel_err and self.sim.step_idx>120: # give it at least 2s
+    # if abs(target-current) > self.max_lataccel_err and self.sim.step_idx>150: # give it at least 5s to try not crashing
+    #   reward = -500
     #   terminated = True
 
     if terminated:
