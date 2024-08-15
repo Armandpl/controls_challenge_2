@@ -1,2 +1,3 @@
 _target_: env.TinyPhysicsEnv
 eval: False
+jerk_cost_coef: 0.02
